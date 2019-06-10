@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+/* A simple Queue implementation */
+
 struct SimpleQueueNode
 {
 	void* pData;
@@ -42,13 +44,13 @@ inline SimpleQueue::~SimpleQueue(void)
 {
 }
 
-// Enqueue() function
-
+/* Return the number of element inside */
 inline int SimpleQueue::getCount(void)
 {
 	return tCount;
 }
 
+/* Add a member into the queue */
 inline int SimpleQueue::Enqueue(void* pVoid)
 {
 	struct SimpleQueueNode* pNewNode = new struct SimpleQueueNode;
@@ -72,8 +74,7 @@ inline int SimpleQueue::Enqueue(void* pVoid)
 	return 0;
 }
 
-// Dequeue() function
-
+/* Return the first in member and remove it from the queue */
 inline void* SimpleQueue::Dequeue(void)
 {
 	void* pData = pFirstNode->pData;
@@ -100,6 +101,7 @@ inline void* SimpleQueue::Dequeue(void)
 	return pData;
 }
 
+/* Return the first in member */
 inline void* SimpleQueue::GetFirst(void)
 {
 	pCurrentNode = pFirstNode;
@@ -107,6 +109,7 @@ inline void* SimpleQueue::GetFirst(void)
 	return pData;
 }
 
+/* Return the member next to the previously returned member */
 inline void* SimpleQueue::GetNext(void)
 {
 

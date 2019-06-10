@@ -9,7 +9,8 @@
 
 using namespace tinyxml2;
 
-
+/* According to the type read from the XML element, 
+   set the type in the parser node */
 void setPType(ParserIFace* parserNode, XMLElement* xmlNode)
 {
 	char* typeName = (char*)xmlNode->Attribute("type");
@@ -33,26 +34,8 @@ void setPType(ParserIFace* parserNode, XMLElement* xmlNode)
 	}
 }
 
-void setPStructType(ParserIFace* parserNode, XMLElement* xmlNode)
-{
-	char* typeName = (char*)xmlNode->Attribute("structType");
-	if (typeName != NULL)
-	{
-		if (strcmp(typeName, "enum") == 0)
-		{
-			parserNode->setPStructType(P_ENUM);
-		}
-
-		if (strcmp(typeName, "category") == 0)
-		{
-			parserNode->setPStructType(P_CATEGORY);
-		}
-
-	}
-}
-
-
-
+/* Read all the avaliable attributes in the XML element,
+   set the attribute names and flag in the parser node */
 void setParserAttributes(ParserIFace* parserNode, XMLElement* xmlNode)
 {
 	char* name = (char*)xmlNode->Attribute("name");
@@ -60,6 +43,13 @@ void setParserAttributes(ParserIFace* parserNode, XMLElement* xmlNode)
 	{
 		parserNode->setName(name);
 	}
+
+	int isEnum = xmlNode->IntAttribute("isENUM");
+	if (isEnum == 1)
+	{
+		parserNode->setIsEnum();
+	}
+
 	char* dllName = (char*)xmlNode->Attribute("Dll");
 	if (dllName != NULL)
 	{
@@ -93,9 +83,9 @@ void setParserAttributes(ParserIFace* parserNode, XMLElement* xmlNode)
 	
 
 	setPType(parserNode, xmlNode);
-	setPStructType(parserNode, xmlNode);
 }
 
+/* A recursive help function to build the parser tree */
 ParserIFace* buildXmlTreeHelp(XMLElement* xmlNode, int level)
 {
 
@@ -132,7 +122,7 @@ ParserIFace* buildXmlTreeHelp(XMLElement* xmlNode, int level)
 
 			while (child != NULL)
 			{
-				newNode->addChild(buildXmlTreeHelp(child, level + 1));
+				newNode->addChild(buildXmlTreeHelp(child, level + 1)); // recursive call
 				child = child->NextSiblingElement();
 			}
 		}
@@ -143,6 +133,7 @@ ParserIFace* buildXmlTreeHelp(XMLElement* xmlNode, int level)
 	return newNode;
 }
 
+/* The function to build the parser tree */
 ParserIFace* buildXmlTree(const char* xmlFileName)
 {
 	XMLDocument doc;
@@ -169,7 +160,7 @@ ParserIFace* buildXmlTree(const char* xmlFileName)
 }
 
 
-
+/* The main function to open XML and build the Parser Tree*/
 int main(void)
 {
 	printf("Hallo World\n");
@@ -186,7 +177,7 @@ int main(void)
 
     /*parserTreeRoot->checkNameTest();*/
 	printf("\n\n");
-	char buffer[128] = { 0xAA, 0x55, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,  0xAA, 0x55, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xAA, 0x55, 0x01, 0x02, 0x03, 
+	char buffer[128] = { 0xAA, 0x55, 0x80, 0x02, 0x03, 0x04, 0x05, 0x06,  0xAA, 0x55, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xAA, 0x55, 0x01, 0x02, 0x03, 
 		0x04, 0x05, 0x06, 0xAA, 0x55, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xAA, 0x55, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xAA, 0x55, 0x01, 0x02, 0x03, 
 		0x04, 0x05, 0x06 };
 	parserTreeRoot->Run(buffer);
