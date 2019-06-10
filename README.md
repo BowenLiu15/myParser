@@ -1,4 +1,6 @@
 # myParser
 Summer Project
 
-This is a testing libarary
+A library that can build parser tree according to the XML file
+
+This library is still under testing
