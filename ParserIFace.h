@@ -13,6 +13,8 @@
 #define P_ATTRIB_NAME		(1 << 5)
 #define P_ATTRIB_VALUE		(1 << 6)
 #define P_ATTRIB_ENUM		(1 << 7)
+#define P_ATTRIB_LENGTH	    (1 << 8)
+#define P_ATTRIB_PAYLOAD	(1 << 9)
 
 #include "SimpleQueue.h"
 
@@ -33,19 +35,15 @@ typedef enum _P_TYPE
 	P_TYPE_NONE,
 } P_TYPE;
 
-typedef enum _P_STRUCT_TYPE
-{
-	P_ENUM,
-	P_CATEGORY,
-
-} P_STRUCT_TYPE;
-
+typedef int (*fPutS)(char* str);
 
 class ParserIFace
 {
 public:
 
 	virtual ~ParserIFace() = 0;
+
+	virtual void registerPrintFunction(fPutS func) = 0;
 
 	/* Main function to start parsering according to the parser tree
 	 * Requires:
@@ -123,15 +121,37 @@ public:
      */
 	virtual void setBuffer(char* pDataBuffer) = 0;
 
+	/* Set the level of the current parser in the parser tree*/
 	virtual void setLevel(int level) = 0;
+
+	/* Recursive Function to print out the names stored in each node
+		in the parser tree */
 	virtual void checkNameTest() = 0;
-	virtual void* getChild() = 0;
+
+	/* Get the first child of the current parser */
+	virtual void* getFirstChild() = 0;
+
+	/* Get the next child of the current parser*/
+	virtual void* getNextChild() = 0;
+
+	/* Set the length attribute of the parser */
+	virtual void setDataLength(int length) = 0;
+
+	/* Set the length attribute of the parser 
+	 * Requires:
+	 *		payload muse be a valid ParserIFace Pointer
+	 */
+	virtual void setPayload(ParserIFace* payload) = 0;
 
 	/* Add a child to this parser node
 	 * Requires:
      *     newhChild must be a valid pointer to a ParserIFace Object
      */
 	virtual void addChild(void* newChild) = 0;
+
+	virtual ParserIFace* searchByValue(int value) = 0;
+
+	virtual ParserIFace* searchByName(char* name) = 0;
 };
 
 inline ParserIFace::~ParserIFace()

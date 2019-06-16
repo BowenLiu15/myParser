@@ -4,12 +4,15 @@
 #include "ParserIFace.h" 
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 
 /* Implementation of the Parser */
+
 
 class ParserImpl : public ParserIFace
 {
 public:
+
 	ParserImpl() : attributes(0), pType(P_TYPE_NONE), pBuffer(NULL)
 	{
 		memset(dllName, 0x00, sizeof(dllName));
@@ -22,6 +25,11 @@ public:
 	~ParserImpl()
 	{
 		printf("ParserImpl's virtual destructor is called.\n");
+	}
+
+	virtual char* Run(char* buffer)
+	{
+		return NULL;
 	}
 
 	void setPType(P_TYPE p_type)
@@ -51,7 +59,6 @@ public:
 		return pValue;
 	}
 
-	/* Set the level of the node in the parser tree */
 	void setLevel(int newLevel)
 	{
 		level = newLevel;
@@ -112,6 +119,12 @@ public:
 		strcpy(deleteFnName, newName);
 	}
 
+	void setDataLength(int length)
+	{
+		attributes |= P_ATTRIB_LENGTH;
+		s_dataLength = length;
+	}
+
 	int hasChildren()
 	{
 		return childrenQueue.getCount();
@@ -122,17 +135,23 @@ public:
 		pBuffer = pDataBuffer;
 	}
 
-	/* The main function to be called to start parsering 
-	 * Requires:
-	 *     buffer must be a valid pointer to the binary data 
-	*/
-	virtual char* Run(char* buffer) {
-		pBuffer = buffer;
-		return RunHelp(buffer);
+	virtual void setPayload(ParserIFace* payload)
+	{
+		pPayload = payload;
+		attributes |= P_ATTRIB_PAYLOAD;
 	}
 
-	/* Recursive Function to print out the names stored in each node 
-	   in the parser tree */
+	/* Check whether the parser has payload */
+	int hasPayload()
+	{
+		return(attributes & P_ATTRIB_PAYLOAD);
+	}
+
+	ParserIFace* getPayload()
+	{
+		return pPayload;
+	}
+
 	void checkNameTest()
 	{
 		// print the name of the current node
@@ -181,14 +200,115 @@ public:
 
 	}
 
-	void* getChild()
+	void* getFirstChild()
 	{
-		return childrenQueue.Dequeue();
+		return childrenQueue.GetFirst();
+	}
+
+	void* getNextChild()
+	{
+		return childrenQueue.GetNext();
 	}
 
 	void addChild(void* newChild)
 	{
 		childrenQueue.Enqueue(newChild);
+	}
+
+	/* 
+	 * Return the name of the parser member, inside a 
+	 * enumeration parser node, whose value match the name ID
+	 */
+
+	virtual char* enumHandle(int nameID)
+	{
+		// if the enumeration doesn't have member just return.
+
+		if (hasChildren() == 0)
+		{
+			return NULL;
+		}
+
+		// print the name of the node.
+		ParserImpl* enumList = (ParserImpl*)childrenQueue.GetFirst();
+		char* name = enumList->getName();
+		if (name[0] != '\0')
+		{
+			printf("%s: ", name);
+		}
+
+		// go through the members and find the match
+		ParserImpl* enumNode = (ParserImpl*)enumList->childrenQueue.GetFirst();
+		while (enumNode != NULL)
+		{
+			if (nameID == enumNode->getValue())
+			{
+
+				printf("%s, ", enumNode->getName());
+				return enumNode->getName();
+			}
+			enumNode = (ParserImpl*)enumList->childrenQueue.GetNext();
+		}
+
+		printf("cannot find match, ");
+		return NULL;
+	}
+
+	virtual ParserIFace* searchByValue(int value)
+	{
+
+		if (hasChildren() == 0)
+		{
+			return NULL;
+		}
+		ParserIFace* child = (ParserIFace*)getFirstChild();
+		while (child != NULL)
+		{
+			if (child->getValue() == value)
+			{
+				return child;
+			}
+			ParserIFace* found = child->searchByValue(value);
+			if (found != NULL)
+			{
+				return found;
+			}
+			child = (ParserIFace*)getNextChild();
+		}
+		return NULL;
+	}
+
+	virtual ParserIFace* searchByName(char* name)
+	{
+
+		if (hasChildren() == 0)
+		{
+			return NULL;
+		}
+
+		ParserIFace* child = (ParserIFace*)getFirstChild();
+		while (child != NULL)
+		{
+			if (!strcmp(child->getName(),name))
+			{
+				return child;
+			}
+			ParserIFace* found = child->searchByName(name);
+			if (found != NULL)
+			{
+				return found;
+			}
+			child = (ParserIFace*)getNextChild();
+		}
+		return NULL;
+	}
+
+
+
+
+	virtual void registerPrintFunction(fPutS func)
+	{
+		putS = func;
 	}
 
 protected:
@@ -201,42 +321,63 @@ protected:
 	/* Hanlde the enumeration types.
 	 * print the correct member whose value matched the given data byte. 
 	 */
-	virtual void enumHandle(unsigned int nameData)
+	
+	void printf(const char* format, ...)
 	{
-		// if the enumeration doesn't have member just return.
-		if (hasChildren() == 0)
-		{
-			return;
-		}
+		// create str
+		char buffer[128];
+		// print to string
 
-		// print the name of the node.
-		ParserImpl* enumList = (ParserImpl*)childrenQueue.GetFirst();
-		char* name = enumList->getName();
-		if (name[0] != '\0')
+		va_list args;
+		va_start(args, format);
+		vsprintf(buffer, format, args);
+		va_end(args);
+		if (putS != NULL)
 		{
-			printf("Enum name: %s: ", name);
+			putS(buffer);
 		}
-
-		// go through the members and find the match
-		ParserImpl* enumNode = (ParserImpl*)enumList->childrenQueue.GetFirst();
-		while (enumNode != NULL)
+		else
 		{
-			if (nameData == enumNode->getValue())
-			{
-			
-				printf("Name: %s, ",  enumNode->getName());
-				return;
-			}
-			enumNode = (ParserImpl*)enumList->childrenQueue.GetNext();
+			puts(buffer);
 		}
-
-		printf("cannot find match, ");
 	}
 
-	/* 
-	 *  A recursive help function for Run() 
-	 */
-	virtual char* RunHelp(char* buffer)
+protected:
+
+	SimpleQueue    childrenQueue;			  // A queue contains all the child parser nodes
+	int            level;					  // Level in the tree
+	int            pValue;					  // Expected value matching this node
+	unsigned int   attributes;                // Attribute flags 
+	char           dllName[4096];
+	char           className[4096];
+	char           createFnName[4096];
+	char           deleteFnName[4096];
+	P_TYPE         pType;				      // Data type of this node	
+	char           name[4096];			      // Name buffer
+	char*          pBuffer;				      // Local data buffer
+	int            s_dataLength;              // How many pType data need to read
+	ParserIFace*    pPayload;
+	fPutS          putS;
+
+};
+
+
+
+class ParserGenericImpl : public ParserImpl
+{
+public:
+
+	ParserGenericImpl()
+	{
+		attributes = 0;
+	}
+
+	~ParserGenericImpl()
+	{
+
+	}
+	
+	virtual char* Run(char* buffer)
 	{
 		if (buffer == NULL)
 		{
@@ -253,15 +394,214 @@ protected:
 		return newBuffer;
 	}
 
-	/*
-	 *  A function to handle the current parser node.
-	 *	Consume some data bytes from the data buffer, 
-	 *  print out the information and data,
-	 *  and return the updated data buffer.
-	 */
+protected:
+
+	/**
+     *  A function to handle the current parser node.
+     *	Consume some data bytes from the data buffer,
+     *  print out the information and data,
+     *  and return the updated data buffer.
+     */
 	virtual char* action(char* pBuffer)
 	{
 
+		// print out all the avaliable attributes 
+		if ((attributes & P_ATTRIB_NAME) != 0)
+		{
+			printf("Name: %s, ", name);
+		}
+		if ((attributes & P_ATTRIB_DLL) != 0)
+		{
+			printf("DLL NAME: %s, ", dllName);
+		}
+
+		if ((attributes & P_ATTRIB_VALUE) != 0)
+		{
+			printf("Expected Data Value: 0x%02X, ", getValue());
+		}
+
+		if ((attributes & P_ATTRIB_CLASS) != 0)
+		{
+			printf("CLASS NAME: %s, ", className);
+		}
+
+		if ((attributes & P_ATTRIB_CREATE_FN) != 0)
+		{
+			printf("CREATE FN NAME: %s, ", createFnName);
+		}
+
+		if ((attributes & P_ATTRIB_DELETE_FN) != 0)
+		{
+			printf("DELETE FN NAME: %s.", deleteFnName);
+		}
+
+		// according to the data type, consume correct number of bytes.
+		switch (pType)
+		{
+		case P_TYPE_UINT8:
+		{
+			// read one byte
+			if (s_dataLength & P_ATTRIB_LENGTH != 0)
+			{
+				char localBuffer[1024];
+				memset(localBuffer, 0x00, sizeof(localBuffer));
+				strncpy(localBuffer, pBuffer, s_dataLength);
+				printf("DATA: %s\n", localBuffer);
+				return pBuffer + s_dataLength;
+			}
+
+			unsigned char ch = pBuffer[0];
+
+
+			if (isEnum())
+			{
+				enumHandle(ch); // handle the enumeration type 
+			}
+			printf("DATA: %02X\n", ch);
+			if (strlen(pBuffer) > 1)
+			{
+
+				return (pBuffer + 1); // return updated the buffer
+			}
+			else
+			{
+				return NULL;
+			}
+		}
+		case P_TYPE_UINT16:
+		{
+			// read two bytes
+			unsigned short int sh = (pBuffer[1] << 8) | (pBuffer[0]);
+
+			if (isEnum())
+			{
+				enumHandle(sh); // handle the enumeration type 
+			}
+			printf("DATA: %04X\n", sh);
+			if (strlen(pBuffer) > 2)
+			{
+
+				return (pBuffer + 2); // return updated the buffer
+			}
+			else
+			{
+				return NULL;
+			}
+		}
+		case P_TYPE_UINT32:
+		{
+			// read four bytes
+			unsigned int wd = (pBuffer[3] << 24) | (pBuffer[2] << 16) | (pBuffer[1] << 8) | (pBuffer[0]);
+
+			if (isEnum())
+			{
+				enumHandle(wd); // handle the enumeration type 
+			}
+			printf("DATA: %08X\n", wd);
+			if (strlen(pBuffer) > 4)
+			{
+
+				return (pBuffer + 4); // return updated the buffer
+			}
+			else
+			{
+
+				return NULL;
+			}
+		}
+		case P_TYPE_NONE:
+		{
+			printf("\n");
+			return pBuffer;
+		}
+
+		default:
+		{
+			printf("\n");
+			return pBuffer;
+		}
+
+		}
+
+	}
+
+	/**
+	 *  A recursive function to use action() to handle the children nodes.
+	 */
+	virtual char* dispatch(char* pBuffer)
+	{
+
+		unsigned int i = hasChildren();
+		// Do the recursive calls for all its child nodes
+		if (i > 0)
+		{
+			if (pBuffer != NULL)
+			{
+				char* pBufferTemp = pBuffer;
+				ParserImpl* pParser = (ParserImpl*)childrenQueue.GetFirst();
+				while (pParser != NULL)
+				{
+					pBufferTemp = pParser->
+						Run(pBufferTemp); // recursive call here
+					pParser = (ParserImpl*)childrenQueue.GetNext();
+				}
+				return pBufferTemp;
+			}
+			else
+			{
+				printf("No more data to feed, stop parsering!!\n");
+				return NULL;
+			}
+		}
+		else
+		{
+			return pBuffer;
+		}
+	}
+};
+
+
+class ParserUspImpl : public ParserGenericImpl
+{
+public:
+	ParserUspImpl()
+	{
+
+	}
+	~ParserUspImpl()
+	{
+
+	}
+	// virtual char* Run(char* buffer)
+	// {
+	//	return NULL;
+	//
+	//
+	// }
+
+protected:
+
+};
+
+
+class ParserSshImpl : public ParserImpl
+{
+public:
+
+	ParserSshImpl()
+	{
+		memset(categoryName, 0x00, sizeof(categoryName));
+		memset(commandName, 0x00, sizeof(commandName));
+	}
+
+	~ParserSshImpl()
+	{
+
+	}
+
+	/* Handle the SSH parser to parse the data correctly */
+	virtual char* Run(char* buffer)
+	{
 		// print out all the avaliable attributes 
 		if ((attributes & P_ATTRIB_NAME) != 0)
 		{
@@ -297,199 +637,123 @@ protected:
 			printf("DELETE FN NAME: %s. \n", deleteFnName);
 		}
 
-		// according to the data type, consume correct number of bytes.
-		switch (pType)
+		pBuffer = buffer;
+		
+		/** Read the TransportProtocol*/
+		ParserImpl* child = (ParserImpl*)getFirstChild();
+		pBuffer = child->Run(pBuffer);
+		
+		/* Read the Category and store the category name*/
+		child = (ParserImpl*)getNextChild();
+		categoryNodeAction(child);
+
+		/* Read the targetId sourceId instanceId and requestId*/
+		for (int i = 0; i < 4; i++)
 		{
-			case P_TYPE_UINT8:
-			{
-				// read one byte
-				unsigned char ch = pBuffer[0];
-				
-				
-				if (isEnum())
-				{
-					enumHandle(ch); // handle the enumeration type 
-				}
-				printf("DATA: %02X\n", ch);
-				if (strlen(pBuffer) > 1)
-				{
-					
-					return (pBuffer + 1); // return updated the buffer
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-			case P_TYPE_UINT16:
-			{
-				// read two bytes
-				unsigned short int sh = (pBuffer[1] << 8) | (pBuffer[0])  ;
-				
-				if (isEnum())
-				{
-					enumHandle(sh); // handle the enumeration type 
-				}
-				printf("DATA: %04X\n", sh);
-				if (strlen(pBuffer) > 2)
-				{
-					
-					return (pBuffer + 2); // return updated the buffer
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-			case P_TYPE_UINT32:
-			{
-				// read four bytes
-				unsigned int wd = (pBuffer[3] << 24) | (pBuffer[2] << 16) | (pBuffer[1] << 8) | (pBuffer[0]);
-				
-				if (isEnum())
-				{
-					enumHandle(wd); // handle the enumeration type 
-				}
-				printf("DATA: %08X\n", wd);
-				if (strlen(pBuffer) > 4)
-				{
-
-					return (pBuffer + 4); // return updated the buffer
-				}
-				else
-				{
-
-					return NULL;
-				}
-			}
-			case P_TYPE_NONE:
-			{
-				printf("\n");
-				return pBuffer;
-			}
-
-			default:
-			{
-				printf("\n");
-				return pBuffer;
-			}
-
+			child = (ParserImpl*)getNextChild();
+			pBuffer = child->Run(pBuffer);
 		}
+
+		/* Read the Command Name */
+		child = (ParserImpl*)getNextChild();
+		commandNodeAction(child);
+		return pBuffer;
+
+
+
+	}
+protected:
+
+private:
+	void categoryNodeAction(ParserImpl* categoryChild)
+	{
+		// according to the data type, consume correct number of bytes.
+		printf("%s :", categoryChild->getName());
+
+		// read four bytes
+		unsigned int wd = (pBuffer[3] << 24) | (pBuffer[2] << 16) | (pBuffer[1] << 8) | (pBuffer[0]);
+		char* cat_name = categoryChild->enumHandle(wd);
+		if (cat_name != NULL)
+		{
+			strcpy(categoryName, cat_name); // handle the enumeration type 
+		}
+
+		printf("DATA: %08X\n", wd);
+
+		pBuffer = pBuffer + 4; // return updated the buffer
 
 	}
 
-	/*
-	 *  A recursive function to handle the children nodes.
-     */
-	virtual char* dispatch(char* pBuffer)
+	void commandNodeAction(ParserImpl* commandIdChild)
 	{
+		// according to the data type, consume correct number of bytes.
+		printf("%s: ", commandIdChild->getName());
 
-		unsigned int i = hasChildren();
-		// Do the recursive calls for all its child nodes
-		if (i > 0)
+		// read one byte
+		if (categoryName[0] != '\0')
 		{
-			if (pBuffer != NULL)
-			{
-				char* pBufferTemp = pBuffer;
-				ParserImpl* pParser = (ParserImpl*)childrenQueue.GetFirst();
-				while (pParser != NULL)
-				{
-					pBufferTemp = pParser->
-						RunHelp(pBufferTemp); // recursive call here
-					pParser = (ParserImpl*)childrenQueue.GetNext();
-				}
-				return pBufferTemp;
-			}
-			else
-			{
-				printf("No more data to feed, stop parsering!!\n");
-				return NULL;
-			}
+			searchCommandId(commandIdChild, categoryName);
+		}
+
+		if (strlen(pBuffer) > 1)
+		{
+
+			pBuffer = pBuffer + 1; // return updated the buffer
 		}
 		else
 		{
-			return pBuffer;
+			pBuffer = NULL;
+		}
+
+
+	}
+
+	void searchCommandId(ParserImpl* commandIdChild, char* enumName)
+	{
+		// if the enumeration doesn't have member just return.
+		unsigned char nameData = pBuffer[0];
+		if (hasChildren() == 0)
+		{
+			return;
+		}
+
+		ParserImpl* caregoryNode = (ParserImpl*)commandIdChild->searchByName(enumName);
+
+		if (caregoryNode != NULL)
+		{
+			ParserImpl* enumNode = (ParserImpl*)caregoryNode->searchByValue(nameData);
+			if (enumNode != NULL)
+			{
+				printf("%s, ", enumNode->getName());
+				strcpy(commandName, enumNode->getName());
+			}
+
+
+			if (caregoryNode->hasPayload() > 0)
+			{
+				searchPayload(caregoryNode->getPayload());
+			}
+
+		}
+		else
+		{
+			printf("Cannot find match\n");
 		}
 	}
 
-protected:
-
-	SimpleQueue childrenQueue;    // A queue contains all the child parser nodes
-	int         level;			  // Level in the tree
-	int pValue;					  // Expected value matching this node
-	unsigned int attributes;      // Attribute flag 
-	char dllName[4096];
-	char className[4096];
-	char createFnName[4096];
-	char deleteFnName[4096];
-	P_TYPE pType;				  // Data type of this node
-	//P_STRUCT_TYPE pStructType;	
-	char name[4096];			  // Name buffer
-	char* pBuffer;				  // Local data buffer
-
-};
-
-
-class ParserGenericImpl : public ParserImpl
-{
-public:
-
-	ParserGenericImpl()
+	void searchPayload(ParserIFace* payloadFile)
 	{
-		attributes = 0;
+		ParserIFace* payloadNode = payloadFile->searchByName(commandName);
+		if (payloadNode != NULL)
+		{
+			pBuffer = payloadNode->Run(pBuffer);
+		}
 	}
 
-	~ParserGenericImpl()
-	{
 
-	}
-	// Take the input buffer, consume some bytes, and return unprocessed buffer
-	//virtual char* Run(char* buffer)
-	//{
-	//	ParserImpl::Run(buffer);
-	//	return NULL;
-	//}
-protected:
-};
-
-
-class ParserUspImpl : public ParserGenericImpl
-{
-public:
-	ParserUspImpl()
-	{
-
-	}
-	~ParserUspImpl()
-	{
-
-	}
-	// virtual char* Run(char* buffer)
-	// {
-	//	return NULL;
-	//
-	//
-	// }
-
-protected:
-
-};
-
-
-class ParserSshImpl : public ParserGenericImpl
-{
-public:
-	ParserSshImpl()
-	{
-
-	}
-	~ParserSshImpl()
-	{
-
-	}
-
-protected:
-
+private:
+	char categoryName[128];
+	char commandName[128];
 };
 
 class ParserHIDImpl : public ParserGenericImpl
